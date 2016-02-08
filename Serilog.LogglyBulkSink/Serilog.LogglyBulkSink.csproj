@@ -49,8 +49,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="LogglyBulkSinkExtension.cs" />
-    <Compile Include="LogglySink.cs" />
+    <Compile Include="ELKBulkSinkExtension.cs" />
+    <Compile Include="ELKSink.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SerilogPropertyFormatter.cs" />
   </ItemGroup>

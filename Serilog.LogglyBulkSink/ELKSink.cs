@@ -11,18 +11,20 @@ using Serilog.Sinks.PeriodicBatching;
 
 namespace Serilog.LogglyBulkSink
 {
-    public class LogglySink : PeriodicBatchingSink
+    public class ELKSink : PeriodicBatchingSink
     {
-        private readonly string _logglyUrl;
-        public const string LogglyUriFormat = "https://logs-01.loggly.com/bulk/{0}/tag/{1}";
+        private readonly string elkUrl;
+        private readonly string indexTemplate;
         public const double MaxBulkBytes = 4.5 * 1024 * 1024;
-        private readonly bool _includeDiagnostics;
+        public const int MaxTermBytes = 32 * 1024;
+        private readonly bool includeDiagnostics;
 
-        public LogglySink(string logglyKey, string[] tags, int batchSizeLimit, TimeSpan period, bool includeDiagnostics = false)
+        public ELKSink(string elkUrl, string indexTemplate, int batchSizeLimit, TimeSpan period, bool includeDiagnostics = false)
             : base(batchSizeLimit, period)
         {
-            _includeDiagnostics = includeDiagnostics;
-            _logglyUrl = string.Format(LogglyUriFormat, logglyKey, string.Join(",", tags));
+            this.elkUrl = elkUrl.TrimEnd('/');
+            this.indexTemplate = indexTemplate;
+            this.includeDiagnostics = includeDiagnostics;
         }
 
         protected override async Task EmitBatchAsync(IEnumerable<LogEvent> events)
@@ -37,7 +39,7 @@ namespace Serilog.LogglyBulkSink
                 {
                     try
                     {
-                        await httpClient.PostAsync(_logglyUrl, content);
+                        await httpClient.PostAsync(string.Format("{0}/{1}", elkUrl, DateTime.UtcNow.ToString(indexTemplate)), content);
                     }
                     catch (Exception ex)
                     {
@@ -74,7 +76,7 @@ namespace Serilog.LogglyBulkSink
                 chunk.Add(json);
             }
 
-            yield return PackageContent(chunk, bytes, page, _includeDiagnostics);
+            yield return PackageContent(chunk, bytes, page, includeDiagnostics);
         }
 
         public static StringContent PackageContent(List<string> jsons, int bytes, int page, bool includeDiagnostics = false)
@@ -113,8 +115,23 @@ namespace Serilog.LogglyBulkSink
                 }
 
                 AddIfNotContains(payload, "Level", logEvent.Level.ToString());
-                AddIfNotContains(payload, "Timestamp", logEvent.Timestamp);
-                AddIfNotContains(payload, "Raw", logEvent.RenderMessage());
+                AddIfNotContains(payload, "@timestamp", logEvent.Timestamp);
+                var message = logEvent.RenderMessage();
+                var messageBytes = Encoding.UTF8.GetBytes(message);
+
+                if (messageBytes.Length > MaxTermBytes)
+                {
+                    var truncated = messageBytes.Length - MaxTermBytes;
+                    var ending = string.Format("[truncated {0}]", truncated);
+                    var subLength = MaxTermBytes - ending.Length;
+                    if (subLength > 0)
+                    {
+                        message = string.Format("{0}{1}", message.Substring(0, subLength), ending);
+                        payload["@truncated"] = truncated;
+                    }
+                }
+
+                AddIfNotContains(payload, "Message", message);
 
                 if (logEvent.Exception != null)
                 {

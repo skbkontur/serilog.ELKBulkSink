@@ -11,7 +11,7 @@ using Serilog.Parsing;
 namespace Serilog.LogglyBulkSink.Tests
 {
     [TestClass]
-    public class SerilogLogglyBulkSinkTests
+    public class SerilogELKBulkSinkTests
     {
         [TestMethod]
         public void TestAddIfContains()
@@ -20,12 +20,12 @@ namespace Serilog.LogglyBulkSink.Tests
             {
                 {"hello", "world"}
             };
-            LogglySink.AddIfNotContains(dictionary, "hello", "another world");
+            ELKSink.AddIfNotContains(dictionary, "hello", "another world");
             dictionary.ContainsKey("hello").Should().BeTrue();
             dictionary["hello"].Should().Be("world");
 
 
-            LogglySink.AddIfNotContains(dictionary, "newkey", "orange");
+            ELKSink.AddIfNotContains(dictionary, "newkey", "orange");
             dictionary.ContainsKey("newkey").Should().BeTrue();
             dictionary["newkey"].Should().Be("orange");
         }
@@ -40,8 +40,8 @@ namespace Serilog.LogglyBulkSink.Tests
                 "{'fruit': 'banana'}",
             }.ToList();
 
-            var noDiagContent = LogglySink.PackageContent(jsons, Encoding.UTF8.GetByteCount(string.Join("\n", jsons)), 0, false);
-            var stringContent = LogglySink.PackageContent(jsons, Encoding.UTF8.GetByteCount(string.Join("\n", jsons)), 0, true);
+            var noDiagContent = ELKSink.PackageContent(jsons, Encoding.UTF8.GetByteCount(string.Join("\n", jsons)), 0, false);
+            var stringContent = ELKSink.PackageContent(jsons, Encoding.UTF8.GetByteCount(string.Join("\n", jsons)), 0, true);
             stringContent.Should().NotBeNull();
             noDiagContent.Should().NotBeNull();
             var result = stringContent.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -60,8 +60,9 @@ namespace Serilog.LogglyBulkSink.Tests
                     new LogEventProperty("0", new ScalarValue("this should be missing")),
                     new LogEventProperty("key", new ScalarValue("value"))
                 });
-            var result = LogglySink.EventToJson(logEvent);
+            var result = ELKSink.EventToJson(logEvent);
             var json = JsonConvert.DeserializeObject<dynamic>(result);
+            Console.WriteLine(json);
             (json["test1"].Value as string).Should().Be("answer1");
             bool hasZero = (json["0"] == null);
             hasZero.Should().Be(true);
@@ -76,9 +77,9 @@ namespace Serilog.LogglyBulkSink.Tests
                 {
                     new LogEventProperty("Field1", new ScalarValue("Value1")),
                 });
-            var result = new List<string>{LogglySink.EventToJson(logEvent)};
+            var result = new List<string>{ELKSink.EventToJson(logEvent)};
 
-            var package = LogglySink.PackageContent(result, 1024, 5, true);
+            var package = ELKSink.PackageContent(result, 1024, 5, true);
 
             var packageStringTask = package.ReadAsStringAsync();
             packageStringTask.Wait();
@@ -97,9 +98,9 @@ namespace Serilog.LogglyBulkSink.Tests
                 {
                     new LogEventProperty("Field1", new ScalarValue("Value1")),
                 });
-            var result = new List<string> { LogglySink.EventToJson(logEvent) };
+            var result = new List<string> { ELKSink.EventToJson(logEvent) };
 
-            var package = LogglySink.PackageContent(result, 1024, 5);
+            var package = ELKSink.PackageContent(result, 1024, 5);
 
             var packageStringTask = package.ReadAsStringAsync();
             packageStringTask.Wait();
@@ -107,6 +108,12 @@ namespace Serilog.LogglyBulkSink.Tests
 
             Assert.IsTrue(result.Count == 1);
             Assert.IsTrue(!packageString.Contains("LogglyDiagnostics"));
+        }
+
+        [TestMethod, TestCategory("Functional")]
+        public void ELKIntegration()
+        {
+            Log.Logger = new LoggerConfiguration().WriteTo.ELKBulk("http://vm-elk:8080/logs/", "log_test_{yyyy.MM.dd}", period: TimeSpan.FromSeconds(1)).CreateLogger();
         }
     }
 }
