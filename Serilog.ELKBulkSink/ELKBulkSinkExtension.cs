@@ -2,7 +2,7 @@
 using Serilog.Configuration;
 using Serilog.Events;
 
-namespace Serilog.LogglyBulkSink
+namespace Serilog.ELKBulkSink
 {
     public static class ELKBulkSinkExtension
     {

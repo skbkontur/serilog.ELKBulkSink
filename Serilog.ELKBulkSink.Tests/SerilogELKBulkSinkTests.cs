@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 using Serilog.Events;
 using Serilog.Parsing;
 
-namespace Serilog.LogglyBulkSink.Tests
+namespace Serilog.ELKBulkSink.Tests
 {
     [TestClass]
     public class SerilogELKBulkSinkTests
@@ -113,7 +113,13 @@ namespace Serilog.LogglyBulkSink.Tests
         [TestMethod, TestCategory("Functional")]
         public void ELKIntegration()
         {
-            Log.Logger = new LoggerConfiguration().WriteTo.ELKBulk("http://vm-elk:8080/logs/", "log_test_{yyyy.MM.dd}", period: TimeSpan.FromSeconds(1)).CreateLogger();
+            var configuration = new LoggerConfiguration().WriteTo.ELKBulk("http://vm-elk:8080/logs/", "test-", period: TimeSpan.FromSeconds(1));
+            Debugging.SelfLog.Out = Console.Out;
+            var logger = configuration.CreateLogger();
+            Log.Logger = logger;
+            Log.Information("Test record");
+            Log.Error(new Exception("Test exception"), "Exception test");
+            ((IDisposable)logger).Dispose();
         }
     }
 }

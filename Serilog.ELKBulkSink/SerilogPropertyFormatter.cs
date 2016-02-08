@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using Serilog.Events;
 
-namespace Serilog.LogglyBulkSink
+namespace Serilog.ELKBulkSink
 {
     internal static class SerilogPropertyFormatter
     {

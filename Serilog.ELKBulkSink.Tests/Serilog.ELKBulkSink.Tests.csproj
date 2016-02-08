@@ -74,9 +74,9 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Serilog.LogglyBulkSink\Serilog.LogglyBulkSink.csproj">
+    <ProjectReference Include="..\Serilog.ELKBulkSink\Serilog.ELKBulkSink.csproj">
       <Project>{0f7b5ba4-8c48-4eb7-bf55-60c1880e1c6d}</Project>
-      <Name>Serilog.LogglyBulkSink</Name>
+      <Name>Serilog.ELKBulkSink</Name>
     </ProjectReference>
   </ItemGroup>
   <Choose>

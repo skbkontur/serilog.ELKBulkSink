@@ -8,18 +8,23 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Serilog.Events;
 using Serilog.Sinks.PeriodicBatching;
+using System.Text.RegularExpressions;
+using Murmur;
 
-namespace Serilog.LogglyBulkSink
+namespace Serilog.ELKBulkSink
 {
     public class ELKSink : PeriodicBatchingSink
     {
         private readonly string elkUrl;
         private readonly string indexTemplate;
+        private readonly bool includeDiagnostics;
+        private static Regex stackTraceFilterRegexp = new Regex(@"(([0-9a-fA-F\-][0-9a-fA-F\-]){2}){4,}", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
         public const double MaxBulkBytes = 4.5 * 1024 * 1024;
         public const int MaxTermBytes = 32 * 1024;
-        private readonly bool includeDiagnostics;
 
-        public ELKSink(string elkUrl, string indexTemplate, int batchSizeLimit, TimeSpan period, bool includeDiagnostics = false)
+        public ELKSink(string elkUrl, string indexTemplate, int batchSizeLimit, TimeSpan period,
+            bool includeDiagnostics = false)
             : base(batchSizeLimit, period)
         {
             this.elkUrl = elkUrl.TrimEnd('/');
@@ -39,11 +44,12 @@ namespace Serilog.LogglyBulkSink
                 {
                     try
                     {
-                        await httpClient.PostAsync(string.Format("{0}/{1}", elkUrl, DateTime.UtcNow.ToString(indexTemplate)), content);
+                        var url = string.Format("{0}/{1}{2}", elkUrl, indexTemplate, DateTime.UtcNow.ToString("yyyy.MM.dd"));
+                        await httpClient.PostAsync(url, content);
                     }
                     catch (Exception ex)
                     {
-                        Trace.WriteLine(string.Format("Exception posting to loggly {0}", ex));
+                        Trace.WriteLine(string.Format("Exception posting to ELK {0}", ex));
                     }
                 }
             }
@@ -135,7 +141,13 @@ namespace Serilog.LogglyBulkSink
 
                 if (logEvent.Exception != null)
                 {
-                    AddIfNotContains(payload, "Exception", logEvent.Exception);
+                    AddIfNotContains(payload, "Exception", logEvent.Exception.ToString());
+                    var stackTrace = logEvent.Exception.StackTrace;
+                    if (stackTrace != null)
+                    {
+                        stackTrace = stackTraceFilterRegexp.Replace(stackTrace, string.Empty);
+                        AddIfNotContains(payload, "exc_stacktrace_hash", GetMurmur3HashString(stackTrace));
+                    }
                 }
 
                 var result = JsonConvert.SerializeObject(payload,
@@ -156,6 +168,11 @@ namespace Serilog.LogglyBulkSink
         {
             if (dictionary.ContainsKey(key)) return;
             dictionary[key] = value;
+        }
+
+        private static string GetMurmur3HashString(string value)
+        {
+            return BitConverter.ToString(MurmurHash.Create128().ComputeHash(Encoding.UTF8.GetBytes(value))).Replace("-", "");
         }
     }
 }
