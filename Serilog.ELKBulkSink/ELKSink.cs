@@ -18,6 +18,7 @@ namespace Serilog.ELKBulkSink
     public class ELKSink : PeriodicBatchingSink
     {
         private readonly SinkOptions options;
+        private readonly bool includeDiagnostics;
 
         private static readonly Regex StackTraceFilterRegexp = new Regex(@"(([0-9a-fA-F\-][0-9a-fA-F\-]){2}){4,}",
             RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled);
@@ -25,11 +26,12 @@ namespace Serilog.ELKBulkSink
         public const double MAX_BULK_BYTES = 4.5 * 1024 * 1024;
         public const int MAX_TERM_BYTES = 32 * 1024;
 
-        public ELKSink(SinkOptions options)
+        public ELKSink(SinkOptions options, bool includeDiagnostics = false)
             : base(options.BatchLimit, options.Period)
         {
             options.Url = options.Url.TrimEnd('/');
             this.options = options;
+            this.includeDiagnostics = includeDiagnostics;
         }
 
         protected override async Task EmitBatchAsync(IEnumerable<LogEvent> events)
@@ -89,9 +91,20 @@ namespace Serilog.ELKBulkSink
 
             yield return PackageContent(chunk, bytes, page);
         }
+        public static StringContent PackageContent(List<string> jsons, int bytes, int page, bool includeDiagnostics = false)
+        {
+            if (includeDiagnostics)
+            {
+                var diagnostic = JsonConvert.SerializeObject(new
+                {
+                    Event = "LogglyDiagnostics",
+                    Trace = $"EventCount={jsons.Count}, ByteCount={bytes}, PageCount={page}"
+                });
+                jsons.Add(diagnostic);
+            }
 
-        public static StringContent PackageContent(List<string> jsons, int bytes, int page) 
-            => new StringContent(string.Join("\n", jsons), Encoding.UTF8, "application/json");
+            return new StringContent(string.Join("\n", jsons), Encoding.UTF8, "application/json");
+        }
 
         public static string EventToJson(LogEvent logEvent)
         {

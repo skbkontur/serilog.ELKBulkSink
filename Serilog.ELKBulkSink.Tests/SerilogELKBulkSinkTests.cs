@@ -113,7 +113,7 @@ namespace Serilog.ELKBulkSink.Tests
         [TestMethod, TestCategory("Functional")]
         public void ELKIntegration()
         {
-            var configuration = new LoggerConfiguration().WriteTo.ELKBulk("http://vm-elk:8080/logs/", "test-", period: TimeSpan.FromSeconds(1));
+            var configuration = new LoggerConfiguration().WriteTo.ELKBulk(new SinkOptions { Url = "http://vm-elk:8080/logs/", IndexTemplate = "test-", Period = TimeSpan.FromSeconds(1)});
             Debugging.SelfLog.Out = Console.Out;
             var logger = configuration.CreateLogger();
             Log.Logger = logger;
