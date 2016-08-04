@@ -79,7 +79,7 @@ namespace Serilog.ELKBulkSink
             {
                 if (bytes > MAX_BULK_BYTES)
                 {
-                    yield return PackageContent(chunk, bytes, page);
+                    yield return PackageContent(chunk, bytes, page, includeDiagnostics);
                     bytes = 0;
                     page++;
                     chunk.Clear();
@@ -89,7 +89,7 @@ namespace Serilog.ELKBulkSink
                 chunk.Add(json);
             }
 
-            yield return PackageContent(chunk, bytes, page);
+            yield return PackageContent(chunk, bytes, page, includeDiagnostics);
         }
         public static StringContent PackageContent(List<string> jsons, int bytes, int page, bool includeDiagnostics = false)
         {
@@ -116,19 +116,19 @@ namespace Serilog.ELKBulkSink
             var payload = new Dictionary<string, object>();
             try
             {
-                foreach (var key in logEvent.Properties.Keys)
+                foreach (var kvp in logEvent.Properties)
                 {
+                    var safeKey = kvp.Key.Replace(" ", "").Replace(":", "").Replace("-", "").Replace("_", "");
                     int dummy;
-                    if (int.TryParse(key, out dummy))
+                    if (int.TryParse(kvp.Key, out dummy))
                         continue;
-                    var propertyValue = logEvent.Properties[key];
-                    var simpleValue = SerilogPropertyFormatter.Simplify(propertyValue);
-                    var safeKey = key.Replace(" ", "").Replace(":", "").Replace("-", "").Replace("_", "");
-                    AddIfNotContains(payload, safeKey, simpleValue);
+                    var simpleValue = SerilogPropertyFormatter.Simplify(kvp.Value);
+                    payload[safeKey] = simpleValue;
                 }
 
-                AddIfNotContains(payload, "Level", logEvent.Level.ToString());
-                AddIfNotContains(payload, "@timestamp", logEvent.Timestamp);
+                payload["Level"] = logEvent.Level.ToString();
+                payload["@timestamp"] = logEvent.Timestamp;
+
                 var message = logEvent.RenderMessage();
                 var messageBytes = Encoding.UTF8.GetBytes(message);
 
@@ -139,21 +139,21 @@ namespace Serilog.ELKBulkSink
                     var subLength = MAX_TERM_BYTES - ending.Length;
                     if (subLength > 0)
                     {
-                        message = $"{message.Substring(0, subLength)}{ending}";
+                        message = message.Substring(0, subLength) + ending;
                         payload["@truncated"] = truncated;
                     }
                 }
 
-                AddIfNotContains(payload, "Message", message);
+                payload["Message"] = message;
 
                 if (logEvent.Exception != null)
                 {
-                    AddIfNotContains(payload, "Exception", logEvent.Exception.ToString());
+                    payload["Exception"] = logEvent.Exception.ToString();
                     var stackTrace = logEvent.Exception.StackTrace;
                     if (stackTrace != null)
                     {
                         stackTrace = StackTraceFilterRegexp.Replace(stackTrace, string.Empty);
-                        AddIfNotContains(payload, "exc_stacktrace_hash", GetMurmur3HashString(stackTrace));
+                        payload["exc_stacktrace_hash"] = GetMurmur3HashString(stackTrace);
                     }
                 }
 
@@ -170,17 +170,11 @@ namespace Serilog.ELKBulkSink
             }
             return null;
         }
-        
-        public static void AddIfNotContains<TKey, TValue>(IDictionary<TKey, TValue> dictionary, TKey key, TValue value)
-        {
-            if (dictionary.ContainsKey(key)) return;
-            dictionary[key] = value;
-        }
 
-        private static string GetMurmur3HashString(string value)
-        {
-            return BitConverter.ToString(MurmurHash.Create128().ComputeHash(Encoding.UTF8.GetBytes(value))).Replace("-", "");
-        }
+        private static string GetMurmur3HashString(string value) 
+            => BitConverter.ToString(MurmurHash.Create128().ComputeHash(Encoding.UTF8.GetBytes(value))).Replace("-", "");
+
+
         private HttpWebRequest CreateWebRequest()
         {
             var url = $"{options.Url}/{options.IndexTemplate}{DateTime.UtcNow.ToString("yyyy.MM.dd")}";

@@ -14,23 +14,6 @@ namespace Serilog.ELKBulkSink.Tests
     public class SerilogELKBulkSinkTests
     {
         [TestMethod]
-        public void TestAddIfContains()
-        {
-            var dictionary = new Dictionary<string, string>()
-            {
-                {"hello", "world"}
-            };
-            ELKSink.AddIfNotContains(dictionary, "hello", "another world");
-            dictionary.ContainsKey("hello").Should().BeTrue();
-            dictionary["hello"].Should().Be("world");
-
-
-            ELKSink.AddIfNotContains(dictionary, "newkey", "orange");
-            dictionary.ContainsKey("newkey").Should().BeTrue();
-            dictionary["newkey"].Should().Be("orange");
-        }
-
-        [TestMethod]
         public void PackageContentsTest()
         {
             var jsons = new[]
