@@ -172,28 +172,25 @@ namespace Serilog.ELKBulkSink
         {
             var url = $"{options.Url}/{options.IndexTemplate}{DateTime.UtcNow.ToString("yyyy.MM.dd")}";
             var webRequest = WebRequest.CreateHttp(new Uri(url));
-            webRequest.Method = WebRequestMethods.Http.Post;
-            webRequest.Headers.Add("Authorization", $"ELK {options.AuthKey}");
-            TuneHttpWebRequest(webRequest);
+            {
+                webRequest.Method = WebRequestMethods.Http.Post;
+                webRequest.Headers.Add("Authorization", $"ELK {options.AuthKey}");
+                webRequest.ContentType = "application/octet-stream";
+                webRequest.SendChunked = true;
+                webRequest.KeepAlive = true;
+                webRequest.Pipelined = true;
+                webRequest.AllowWriteStreamBuffering = false;
+                webRequest.AllowReadStreamBuffering = false;
+                webRequest.AuthenticationLevel = AuthenticationLevel.None;
+                webRequest.AutomaticDecompression = DecompressionMethods.None;
+                webRequest.ServicePoint.Expect100Continue = false;
+                webRequest.ServicePoint.ConnectionLimit = 200;
+                webRequest.ServicePoint.UseNagleAlgorithm = false;
+                webRequest.ServicePoint.ReceiveBufferSize = 1024;
+                webRequest.Timeout = (int)options.Timeout.TotalMilliseconds;
+                webRequest.ReadWriteTimeout = (int)options.Timeout.TotalMilliseconds;
+            }
             return webRequest;
-        }
-
-        private void TuneHttpWebRequest(HttpWebRequest webRequest)
-        {
-            webRequest.ContentType = "application/octet-stream";
-            webRequest.SendChunked = true;
-            webRequest.KeepAlive = true;
-            webRequest.Pipelined = true;
-            webRequest.AllowWriteStreamBuffering = false;
-            webRequest.AllowReadStreamBuffering = false;
-            webRequest.AuthenticationLevel = AuthenticationLevel.None;
-            webRequest.AutomaticDecompression = DecompressionMethods.None;
-            webRequest.ServicePoint.Expect100Continue = false;
-            webRequest.ServicePoint.ConnectionLimit = 200;
-            webRequest.ServicePoint.UseNagleAlgorithm = false;
-            webRequest.ServicePoint.ReceiveBufferSize = 1024;
-            webRequest.Timeout = (int)options.Timeout.TotalMilliseconds;
-            webRequest.ReadWriteTimeout = (int)options.Timeout.TotalMilliseconds;
         }
     }
 }
