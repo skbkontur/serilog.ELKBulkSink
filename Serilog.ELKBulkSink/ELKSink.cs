@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Security;
 using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -15,21 +17,19 @@ namespace Serilog.ELKBulkSink
 {
     public class ELKSink : PeriodicBatchingSink
     {
-        private readonly string elkUrl;
-        private readonly string indexTemplate;
-        private readonly bool includeDiagnostics;
-        private static Regex stackTraceFilterRegexp = new Regex(@"(([0-9a-fA-F\-][0-9a-fA-F\-]){2}){4,}", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        private readonly SinkOptions options;
 
-        public const double MaxBulkBytes = 4.5 * 1024 * 1024;
-        public const int MaxTermBytes = 32 * 1024;
+        private static readonly Regex StackTraceFilterRegexp = new Regex(@"(([0-9a-fA-F\-][0-9a-fA-F\-]){2}){4,}",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled);
 
-        public ELKSink(string elkUrl, string indexTemplate, int batchSizeLimit, TimeSpan period,
-            bool includeDiagnostics = false)
-            : base(batchSizeLimit, period)
+        public const double MAX_BULK_BYTES = 4.5 * 1024 * 1024;
+        public const int MAX_TERM_BYTES = 32 * 1024;
+
+        public ELKSink(SinkOptions options)
+            : base(options.BatchLimit, options.Period)
         {
-            this.elkUrl = elkUrl.TrimEnd('/');
-            this.indexTemplate = indexTemplate;
-            this.includeDiagnostics = includeDiagnostics;
+            options.Url = options.Url.TrimEnd('/');
+            this.options = options;
         }
 
         protected override async Task EmitBatchAsync(IEnumerable<LogEvent> events)
@@ -40,17 +40,22 @@ namespace Serilog.ELKBulkSink
                 {
                     continue;
                 }
-                using (var httpClient = new HttpClient())
+                try
                 {
-                    try
+                    var webRequest = CreateWebRequest();
+                    using (var requestStream = webRequest.GetRequestStream())
                     {
-                        var url = string.Format("{0}/{1}{2}", elkUrl, indexTemplate, DateTime.UtcNow.ToString("yyyy.MM.dd"));
-                        await httpClient.PostAsync(url, content);
+                        await content.CopyToAsync(requestStream);
                     }
-                    catch (Exception ex)
+                    using (var response = (HttpWebResponse) await webRequest.GetResponseAsync())
                     {
-                        Trace.WriteLine(string.Format("Exception posting to ELK {0}", ex));
+                        if (response.StatusCode != HttpStatusCode.OK)
+                            Trace.WriteLine($"Failed posting log events to ELK, server responded: {response.StatusCode} {response.StatusDescription}");
                     }
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"Exception posting to ELK {ex}");
                 }
             }
         }
@@ -65,12 +70,12 @@ namespace Serilog.ELKBulkSink
             var jsons = events.Select(EventToJson).Where(_ => !string.IsNullOrWhiteSpace(_)).ToList();
 
             var bytes = 0;
-            int page = 0;
+            var page = 0;
             var chunk = new List<string>();
 
             foreach (var json in jsons)
             {
-                if (bytes > MaxBulkBytes)
+                if (bytes > MAX_BULK_BYTES)
                 {
                     yield return PackageContent(chunk, bytes, page);
                     bytes = 0;
@@ -82,29 +87,17 @@ namespace Serilog.ELKBulkSink
                 chunk.Add(json);
             }
 
-            yield return PackageContent(chunk, bytes, page, includeDiagnostics);
+            yield return PackageContent(chunk, bytes, page);
         }
 
-        public static StringContent PackageContent(List<string> jsons, int bytes, int page, bool includeDiagnostics = false)
-        {
-            if (includeDiagnostics)
-            {
-                var diagnostic = JsonConvert.SerializeObject(new
-                {
-                    Event = "LogglyDiagnostics",
-                    Trace = string.Format("EventCount={0}, ByteCount={1}, PageCount={2}", jsons.Count, bytes, page)
-                });
-                jsons.Add(diagnostic);
-            }
-            
-            return new StringContent(string.Join("\n", jsons), Encoding.UTF8, "application/json");
-        }
+        public static StringContent PackageContent(List<string> jsons, int bytes, int page) 
+            => new StringContent(string.Join("\n", jsons), Encoding.UTF8, "application/json");
 
         public static string EventToJson(LogEvent logEvent)
         {
             if (logEvent == null)
             {
-                throw new ArgumentNullException("logEvent");
+                throw new ArgumentNullException(nameof(logEvent));
             }
 
             var payload = new Dictionary<string, object>();
@@ -113,7 +106,8 @@ namespace Serilog.ELKBulkSink
                 foreach (var key in logEvent.Properties.Keys)
                 {
                     int dummy;
-                    if (Int32.TryParse(key, out dummy)) continue;
+                    if (int.TryParse(key, out dummy))
+                        continue;
                     var propertyValue = logEvent.Properties[key];
                     var simpleValue = SerilogPropertyFormatter.Simplify(propertyValue);
                     var safeKey = key.Replace(" ", "").Replace(":", "").Replace("-", "").Replace("_", "");
@@ -125,14 +119,14 @@ namespace Serilog.ELKBulkSink
                 var message = logEvent.RenderMessage();
                 var messageBytes = Encoding.UTF8.GetBytes(message);
 
-                if (messageBytes.Length > MaxTermBytes)
+                if (messageBytes.Length > MAX_TERM_BYTES)
                 {
-                    var truncated = messageBytes.Length - MaxTermBytes;
-                    var ending = string.Format("[truncated {0}]", truncated);
-                    var subLength = MaxTermBytes - ending.Length;
+                    var truncated = messageBytes.Length - MAX_TERM_BYTES;
+                    var ending = $"[truncated {truncated}]";
+                    var subLength = MAX_TERM_BYTES - ending.Length;
                     if (subLength > 0)
                     {
-                        message = string.Format("{0}{1}", message.Substring(0, subLength), ending);
+                        message = $"{message.Substring(0, subLength)}{ending}";
                         payload["@truncated"] = truncated;
                     }
                 }
@@ -145,7 +139,7 @@ namespace Serilog.ELKBulkSink
                     var stackTrace = logEvent.Exception.StackTrace;
                     if (stackTrace != null)
                     {
-                        stackTrace = stackTraceFilterRegexp.Replace(stackTrace, string.Empty);
+                        stackTrace = StackTraceFilterRegexp.Replace(stackTrace, string.Empty);
                         AddIfNotContains(payload, "exc_stacktrace_hash", GetMurmur3HashString(stackTrace));
                     }
                 }
@@ -159,7 +153,7 @@ namespace Serilog.ELKBulkSink
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(string.Format("Error extracting json from logEvent {0}",ex));
+                Trace.WriteLine($"Error extracting json from logEvent {ex}");
             }
             return null;
         }
@@ -173,6 +167,33 @@ namespace Serilog.ELKBulkSink
         private static string GetMurmur3HashString(string value)
         {
             return BitConverter.ToString(MurmurHash.Create128().ComputeHash(Encoding.UTF8.GetBytes(value))).Replace("-", "");
+        }
+        private HttpWebRequest CreateWebRequest()
+        {
+            var url = $"{options.Url}/{options.IndexTemplate}{DateTime.UtcNow.ToString("yyyy.MM.dd")}";
+            var webRequest = WebRequest.CreateHttp(new Uri(url));
+            webRequest.Method = WebRequestMethods.Http.Post;
+            webRequest.Headers.Add("Authorization", $"ELK {options.AuthKey}");
+            TuneHttpWebRequest(webRequest);
+            return webRequest;
+        }
+
+        private void TuneHttpWebRequest(HttpWebRequest webRequest)
+        {
+            webRequest.ContentType = "application/octet-stream";
+            webRequest.SendChunked = true;
+            webRequest.KeepAlive = true;
+            webRequest.Pipelined = true;
+            webRequest.AllowWriteStreamBuffering = false;
+            webRequest.AllowReadStreamBuffering = false;
+            webRequest.AuthenticationLevel = AuthenticationLevel.None;
+            webRequest.AutomaticDecompression = DecompressionMethods.None;
+            webRequest.ServicePoint.Expect100Continue = false;
+            webRequest.ServicePoint.ConnectionLimit = 200;
+            webRequest.ServicePoint.UseNagleAlgorithm = false;
+            webRequest.ServicePoint.ReceiveBufferSize = 1024;
+            webRequest.Timeout = (int)options.Timeout.TotalMilliseconds;
+            webRequest.ReadWriteTimeout = (int)options.Timeout.TotalMilliseconds;
         }
     }
 }
