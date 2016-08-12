@@ -23,13 +23,12 @@ namespace Serilog.ELKBulkSink
         private static readonly Regex StackTraceFilterRegexp = new Regex(@"(([0-9a-fA-F\-][0-9a-fA-F\-]){2}){4,}",
             RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled);
 
-        public const double MAX_BULK_BYTES = 4.5 * 1024 * 1024;
-        public const int MAX_TERM_BYTES = 32 * 1024;
+        private const double MAX_BULK_BYTES = 4.5 * 1024 * 1024;
+        private const int MAX_TERM_BYTES = 32 * 1024;
 
         public ELKSink(SinkOptions options, bool includeDiagnostics = false)
             : base(options.BatchLimit, options.Period)
         {
-            options.Url = options.Url.TrimEnd('/');
             this.options = options;
             this.includeDiagnostics = includeDiagnostics;
         }
@@ -177,7 +176,8 @@ namespace Serilog.ELKBulkSink
 
         private HttpWebRequest CreateWebRequest()
         {
-            var url = $"{options.Url}/{options.IndexTemplate}{DateTime.UtcNow.ToString("yyyy.MM.dd")}";
+            var baseUri = new Uri(options.Url);
+            var url = $"{baseUri}/{options.IndexTemplate}{DateTime.UtcNow.ToString("yyyy.MM.dd")}";
             var webRequest = WebRequest.CreateHttp(new Uri(url));
             {
                 webRequest.Method = WebRequestMethods.Http.Post;

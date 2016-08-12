@@ -6,8 +6,7 @@ namespace Serilog.ELKBulkSink
 {
     public static class ELKBulkSinkExtension
     {
-        public static LoggerConfiguration ELKBulk(this LoggerSinkConfiguration lc,
-            SinkOptions options)
+        public static LoggerConfiguration ELKBulk(this LoggerSinkConfiguration lc, SinkOptions options)
         {
             if (lc == null)
                 throw new ArgumentNullException(nameof(lc));
