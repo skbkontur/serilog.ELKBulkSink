@@ -1,6 +1,5 @@
 ﻿using System;
 using Serilog.Configuration;
-using Serilog.Events;
 
 namespace Serilog.ELKBulkSink
 {

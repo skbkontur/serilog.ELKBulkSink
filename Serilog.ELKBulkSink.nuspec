@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>DevOps.Serilog.ELKBulkSink</id>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
     <authors>Devops</authors>
     <owners>SKB Kontur</owners>
     <title>Bulk sink for serilog to elasticsearch</title>
