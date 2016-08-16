@@ -176,9 +176,8 @@ namespace Serilog.ELKBulkSink
 
         private HttpWebRequest CreateWebRequest()
         {
-            var baseUri = new Uri(options.Url);
-            var url = $"{baseUri}/{options.IndexTemplate}{DateTime.UtcNow.ToString("yyyy.MM.dd")}";
-            var webRequest = WebRequest.CreateHttp(new Uri(url));
+            var url = new Uri(new Uri(options.Url), $"{options.IndexTemplate}{DateTime.UtcNow.ToString("yyyy.MM.dd")}");
+            var webRequest = WebRequest.CreateHttp(url);
             {
                 webRequest.Method = WebRequestMethods.Http.Post;
                 webRequest.Headers.Add("Authorization", $"ELK {options.AuthKey}");
