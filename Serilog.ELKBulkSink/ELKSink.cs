@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -176,8 +177,10 @@ namespace Serilog.ELKBulkSink
 
         private HttpWebRequest CreateWebRequest()
         {
-            var url = new Uri(new Uri(options.Url), $"{options.IndexTemplate}{DateTime.UtcNow.ToString("yyyy.MM.dd")}");
-            var webRequest = WebRequest.CreateHttp(url);
+            var uri = Path.Combine(
+                options.Url, 
+                $"{options.IndexTemplate}{DateTime.UtcNow.ToString("yyyy.MM.dd")}");
+            var webRequest = WebRequest.CreateHttp(uri);
             {
                 webRequest.Method = WebRequestMethods.Http.Post;
                 webRequest.Headers.Add("Authorization", $"ELK {options.AuthKey}");
