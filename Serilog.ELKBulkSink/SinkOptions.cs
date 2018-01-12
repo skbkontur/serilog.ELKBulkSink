@@ -14,5 +14,8 @@ namespace Serilog.ELKBulkSink
 
         public LogEventLevel RestrictedToMinLevel { get; set; } = LogEventLevel.Verbose;
         public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(2);
+
+        public Func<string, bool> ShouldPropertyBeIgnored { get; set; }
+            = propName => propName.StartsWith("__");
     }
 }

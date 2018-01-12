@@ -43,7 +43,7 @@ namespace Serilog.ELKBulkSink.Tests
                     new LogEventProperty("0", new ScalarValue("this should be missing")),
                     new LogEventProperty("key", new ScalarValue("value"))
                 });
-            var result = ELKSink.EventToJson(logEvent);
+            var result = ELKSink.EventToJson(logEvent, new SinkOptions());
             var json = JsonConvert.DeserializeObject<dynamic>(result);
             Console.WriteLine(json);
             (json["test1"].Value as string).Should().Be("answer1");
@@ -60,7 +60,7 @@ namespace Serilog.ELKBulkSink.Tests
                 {
                     new LogEventProperty("Field1", new ScalarValue("Value1")),
                 });
-            var result = new List<string>{ELKSink.EventToJson(logEvent)};
+            var result = new List<string>{ELKSink.EventToJson(logEvent, new SinkOptions()) };
 
             var package = ELKSink.PackageContent(result, 1024, 5, true);
 
@@ -81,7 +81,7 @@ namespace Serilog.ELKBulkSink.Tests
                 {
                     new LogEventProperty("Field1", new ScalarValue("Value1")),
                 });
-            var result = new List<string> { ELKSink.EventToJson(logEvent) };
+            var result = new List<string> { ELKSink.EventToJson(logEvent, new SinkOptions()) };
 
             var package = ELKSink.PackageContent(result, 1024, 5);
 
@@ -96,13 +96,19 @@ namespace Serilog.ELKBulkSink.Tests
         [TestMethod, TestCategory("Functional")]
         public void ELKIntegration()
         {
-            var configuration = new LoggerConfiguration().WriteTo.ELKBulk(new SinkOptions { Url = "http://vm-elk:8080/logs/", IndexTemplate = "test-", Period = TimeSpan.FromSeconds(1)});
+            var configuration = new LoggerConfiguration().WriteTo
+                .ELKBulk(new SinkOptions
+                {
+                    Url = "http://elk-test:8080/logs/",
+                    IndexTemplate = "test-",
+                    Period = TimeSpan.FromSeconds(1)
+                });
             Debugging.SelfLog.Out = Console.Out;
             var logger = configuration.CreateLogger();
             Log.Logger = logger;
             Log.Information("Test record");
             Log.Error(new Exception("Test exception"), "Exception test");
-            ((IDisposable)logger).Dispose();
+            logger.Dispose();
         }
     }
 }

@@ -42,9 +42,7 @@ namespace Serilog.ELKBulkSink
                     if (result.ContainsKey(key))
                     {
                         Trace.WriteLine(
-                            string.Format(
-                                "The key {0} is not unique in the provided dictionary after simplification to {1}.",
-                                element.Key, key));
+                            $"The key {element.Key} is not unique in the provided dictionary after simplification to {key}.");
                         return dict.Elements.Select(e => new Dictionary<string, object>
                         {
                             {"Key", SimplifyScalar(e.Key.Value)},

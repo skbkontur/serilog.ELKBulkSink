@@ -69,7 +69,10 @@ namespace Serilog.ELKBulkSink
                 yield break;
             }
 
-            var jsons = events.Select(EventToJson).Where(_ => !string.IsNullOrWhiteSpace(_)).ToList();
+            var jsons = events
+                .Select(e => EventToJson(e, options))
+                .Where(_ => !string.IsNullOrWhiteSpace(_))
+                .ToList();
 
             var bytes = 0;
             var page = 0;
@@ -106,7 +109,7 @@ namespace Serilog.ELKBulkSink
             return new StringContent(string.Join("\n", jsons), Encoding.UTF8, "application/json");
         }
 
-        public static string EventToJson(LogEvent logEvent)
+        public static string EventToJson(LogEvent logEvent, SinkOptions options)
         {
             if (logEvent == null)
             {
@@ -118,7 +121,15 @@ namespace Serilog.ELKBulkSink
             {
                 foreach (var kvp in logEvent.Properties)
                 {
-                    var safeKey = kvp.Key.Replace(" ", "").Replace(":", "").Replace("-", "").Replace("_", "");
+                    if (options.ShouldPropertyBeIgnored?.Invoke(kvp.Key) ?? false)
+                        continue;
+
+                    var safeKey = kvp.Key
+                        .Replace(" ", string.Empty)
+                        .Replace(":", string.Empty)
+                        .Replace("-", string.Empty)
+                        .Replace("_", string.Empty);
+
                     int dummy;
                     if (int.TryParse(kvp.Key, out dummy))
                         continue;
@@ -179,7 +190,7 @@ namespace Serilog.ELKBulkSink
         {
             var uri = Path.Combine(
                 options.Url, 
-                $"{options.IndexTemplate}{DateTime.UtcNow.ToString("yyyy.MM.dd")}");
+                $"{options.IndexTemplate}{DateTime.UtcNow:yyyy.MM.dd}");
             var webRequest = WebRequest.CreateHttp(uri);
             {
                 webRequest.Method = WebRequestMethods.Http.Post;
