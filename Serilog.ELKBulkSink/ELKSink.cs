@@ -188,13 +188,15 @@ namespace Serilog.ELKBulkSink
 
         private HttpWebRequest CreateWebRequest()
         {
-            var uri = Path.Combine(
-                options.Url, 
-                $"{options.IndexTemplate}{DateTime.UtcNow:yyyy.MM.dd}");
+            var uri = options.AppendIndex
+                ? Path.Combine(
+                    options.Url,
+                    $"{options.IndexTemplate}{DateTime.UtcNow:yyyy.MM.dd}")
+                : options.Url;
             var webRequest = WebRequest.CreateHttp(uri);
             {
                 webRequest.Method = WebRequestMethods.Http.Post;
-                webRequest.Headers.Add("Authorization", $"ELK {options.AuthKey}");
+                webRequest.Headers.Add("Authorization", $"{options.AuthSchema} {options.AuthKey}");
                 webRequest.ContentType = "application/octet-stream";
                 webRequest.SendChunked = true;
                 webRequest.KeepAlive = true;

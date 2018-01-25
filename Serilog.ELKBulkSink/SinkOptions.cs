@@ -7,7 +7,9 @@ namespace Serilog.ELKBulkSink
     {
         public string Url { get; set; }
         public string IndexTemplate { get; set; }
+        public bool AppendIndex { get; set; } = true;
         public string AuthKey { get; set; }
+        public string AuthSchema { get; set; } = "ELK";
 
         public int BatchLimit { get; set; } = 100;
         public TimeSpan Period { get; set; } = TimeSpan.FromSeconds(30);
